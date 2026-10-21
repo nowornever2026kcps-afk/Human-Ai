@@ -84,8 +84,8 @@ import {TransformControls} from 'three/addons/controls/TransformControls.js';
 import {createClient} from '@supabase/supabase-js';
 const $=id=>document.getElementById(id), KEY='project-human-challenges-v1', viewport=$('viewport');
 // Replace these with the Supabase Project URL and public anon/publishable key. Never put a service_role key in frontend code.
-const SUPABASE_URL='YOUR_SUPABASE_PROJECT_URL';
-const SUPABASE_ANON_KEY='YOUR_SUPABASE_PUBLIC_ANON_KEY';
+const SUPABASE_URL='https://yquvzvazwekmvcnozkug.supabase.co';
+const SUPABASE_ANON_KEY='sb_publishable_FgMH-_mvTZ71EHxb_8R_Jw_ahGg68-g';
 const cloudConfigured=SUPABASE_URL.startsWith('https://')&&!SUPABASE_URL.includes('YOUR_')&&SUPABASE_ANON_KEY.length>20&&!SUPABASE_ANON_KEY.includes('YOUR_');
 const supabase=cloudConfigured?createClient(SUPABASE_URL,SUPABASE_ANON_KEY):null;
 let currentUser=null;
