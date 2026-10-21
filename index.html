@@ -79,7 +79,10 @@ body.account-modal-open::before{content:"";position:fixed;inset:0;z-index:100;ba
 <section class="section"><h2 class="section-title">Challenge stats <span>03</span></h2><div class="metric-grid"><div class="metric"><strong id="objectCount">0</strong><span>OBJECTS</span></div><div class="metric"><strong>40×40</strong><span>WORLD SIZE</span></div></div></section>
 </aside>
 <section class="workspace"><div class="viewport" id="viewport"></div>
-<div class="canvas-toolbar"><button class="active" data-mode="translate">↔ Move</button><button data-mode="rotate">⟳ Rotate</button><button data-mode="scale">⤢ Scale</button><button id="duplicateBtn">Duplicate</button><button id="deleteBtn">Delete</button><button id="resetCameraBtn">Reset view</button></div>
+<div class="canvas-toolbar"><button class="active" data-mode="translate">↔ Move</button><button data-mode="rotate">⟳ Rotate</button><button data-mode="scale">⤢ Scale</button><button id="undoBtn" title="Undo (Ctrl+Z)">↶ Undo</button>
+<button id="redoBtn" title="Redo (Ctrl+Y)">↷ Redo</button>
+<button id="duplicateBtn">Duplicate</button>
+<button id="deleteBtn">Delete</button><button id="resetCameraBtn">Reset view</button></div>
 <div class="view-label">3D EDITOR · PERSPECTIVE</div><div class="toast" id="toast"></div>
 <div class="help-pill"><strong style="color:#dce8ff">Controls:</strong> drag empty space to orbit · pinch/scroll to zoom · mobile: long-press objects to multi-select <span id="saveState" style="float:right">Local draft</span></div>
 <div class="overlay" id="openOverlay"><div class="modal"><div style="display:flex;justify-content:space-between;align-items:center"><h2>Open a challenge</h2><button id="closeOpenBtn">✕</button></div><p class="muted tiny">Saved challenges on this browser. Export JSON to move a challenge to another device.</p><div class="saved-list" id="savedList"></div><div class="divider"></div><label class="field"><span class="muted tiny">Import challenge JSON</span><input type="file" id="importFile" accept=".json,application/json"></label></div></div>
@@ -176,10 +179,47 @@ const controls=new OrbitControls(camera,renderer.domElement);controls.target.set
 scene.add(new THREE.HemisphereLight(0xb9dcff,0x253047,2.1));const sun=new THREE.DirectionalLight(0xe5f4ff,2.4);sun.position.set(12,24,10);sun.castShadow=true;sun.shadow.mapSize.set(1024,1024);scene.add(sun);const fill=new THREE.PointLight(0x6e70ff,65,45);fill.position.set(-12,8,-10);scene.add(fill);
 const ground=new THREE.Mesh(new THREE.PlaneGeometry(60,60),new THREE.MeshStandardMaterial({color:'#111b2a',roughness:.88}));ground.rotation.x=-Math.PI/2;ground.position.y=-.04;ground.receiveShadow=true;scene.add(ground);const grid=new THREE.GridHelper(60,60,'#38516b','#1d2d42');scene.add(grid);
 const transform=new TransformControls(camera,renderer.domElement);transform.setSize(.8);scene.add(transform.getHelper());transform.addEventListener('dragging-changed',e=>{controls.enabled=!e.value;if(!e.value){if(multiPivot){restoreMultiPivot();attachSelection()}syncProps();renderList();dirty()}});transform.addEventListener('objectChange',syncProps);
-let objects=[],selected=null,selectedObjects=[],multiPivot=null,challengeId=null,isDirty=false,toastTimer;const raycaster=new THREE.Raycaster(),pointer=new THREE.Vector2();
+let objects=[],selected=null,selectedObjects=[],multiPivot=null,challengeId=null,isDirty=false,toastTimer;
+let undoHistory=[],redoHistory=[],lastHistorySnapshot='';
+const HISTORY_LIMIT=50;
+const raycaster=new THREE.Raycaster(),pointer=new THREE.Vector2();,multiPivot=null,challengeId=null,isDirty=false,toastTimer;const raycaster=new THREE.Raycaster(),pointer=new THREE.Vector2();
 const defaults={block:{name:'Block',size:[2,2,2],color:'#4f82b8',y:1},platform:{name:'Platform',size:[5,.5,4],color:'#3b6889',y:.25},ramp:{name:'Ramp',size:[4,.45,3],color:'#6d7fe5',y:.8},wall:{name:'Wall',size:[1,4,5],color:'#53617b',y:2},megaWall:{name:'Mega Wall',size:[1,7,12],color:'#53617b',y:3.5},stairs:{name:'Grand Staircase',size:[1,1,1],color:'#4f7397',y:0},bridge:{name:'Bridge',size:[7,.35,2],color:'#4c718b',y:1},moving:{name:'Moving Block',size:[2,1,2],color:'#e5a34d',y:2},marker:{name:'Goal Marker',size:[1,1,1],color:'#a78bfa',y:.5},arch:{name:'Archway',size:[4,4,1],color:'#6478e8',y:2},tunnel:{name:'Tunnel',size:[5,3,3],color:'#4f9da8',y:1.5},pillar:{name:'Pillar',size:[1,4,1],color:'#657d9f',y:2},pipe:{name:'Pipe',size:[4,.55,.55],color:'#e5a34d',y:1.5},crate:{name:'Crate',size:[2,2,2],color:'#a86e48',y:1},hazard:{name:'Spike Hazard',size:[3,.8,1],color:'#e35f78',y:.4},seesaw:{name:'Seesaw',size:[5,.25,1],color:'#63e6ff',y:1},spring:{name:'Spring Pad',size:[2,.6,2],color:'#a78bfa',y:.3}};
 function toast(s){$('toast').textContent=s;$('toast').classList.add('show');clearTimeout(toastTimer);toastTimer=setTimeout(()=>$('toast').classList.remove('show'),2400)}
-function dirty(){isDirty=true;$('saveState').textContent='Unsaved changes';$('saveState').style.color='#ffc978'}function saved(){isDirty=false;$('saveState').textContent='Saved locally';$('saveState').style.color='#65e6a5'}
+function historySnapshot(){
+  const data=serialize();
+  delete data.updatedAt;
+  return JSON.stringify(data);
+}
+
+function dirty(){
+  isDirty=true;
+  $('saveState').textContent='Unsaved changes';
+  $('saveState').style.color='#ffc978';
+
+  try {
+    const next=historySnapshot();
+
+    if(lastHistorySnapshot && next!==lastHistorySnapshot){
+      undoHistory.push(lastHistorySnapshot);
+
+      if(undoHistory.length>HISTORY_LIMIT){
+        undoHistory.shift();
+      }
+
+      redoHistory=[];
+    }
+
+    lastHistorySnapshot=next;
+  } catch(e) {
+    // History initializes after the editor is ready.
+  }
+}
+
+function saved(){
+  isDirty=false;
+  $('saveState').textContent='Saved locally';
+  $('saveState').style.color='#65e6a5';
+}
 function marker(kind){
  const g=new THREE.Group(),color=kind==='start'?'#65e6a5':'#a78bfa';
  const ring=new THREE.Mesh(new THREE.TorusGeometry(kind==='start'?.75:.9,.075,10,40),new THREE.MeshStandardMaterial({color,emissive:color,emissiveIntensity:1.5}));ring.rotation.x=Math.PI/2;ring.position.y=.08;g.add(ring);
@@ -416,7 +456,87 @@ let touchSelect=null;
 renderer.domElement.addEventListener('pointerdown',e=>{if(e.pointerType!=='touch')return;const helper=transform.getHelper();const rr=renderer.domElement.getBoundingClientRect();pointer.x=(e.clientX-rr.left)/rr.width*2-1;pointer.y=-(e.clientY-rr.top)/rr.height*2+1;raycaster.setFromCamera(pointer,camera);if(raycaster.intersectObject(helper,true).length)return;const target=objectAtPointer(e);if(!target)return;e.preventDefault();e.stopImmediatePropagation();const x=e.clientX,y=e.clientY;let moved=false,done=false;const cleanup=()=>{clearTimeout(timer);renderer.domElement.removeEventListener('pointermove',move,true);renderer.domElement.removeEventListener('pointerup',up,true);renderer.domElement.removeEventListener('pointercancel',cancel,true);if(touchSelect===cleanup)touchSelect=null};const timer=setTimeout(()=>{if(moved||done)return;done=true;selectObject(target,{toggle:true});toast(selectedObjects.length>1?'Added to multi-selection':'Selection updated');},500);const move=ev=>{if(Math.hypot(ev.clientX-x,ev.clientY-y)>9){moved=true;cleanup()}};const up=ev=>{if(done||moved){cleanup();return}done=true;clearTimeout(timer);selectObject(target);cleanup()};const cancel=()=>cleanup();touchSelect=cleanup;renderer.domElement.addEventListener('pointermove',move,true);renderer.domElement.addEventListener('pointerup',up,true);renderer.domElement.addEventListener('pointercancel',cancel,true);},{capture:true});
 renderer.domElement.addEventListener('pointerdown',e=>{if(e.pointerType==='touch')return;const o=objectAtPointer(e);if(o)selectObject(o,{toggle:e.shiftKey||e.ctrlKey||e.metaKey});else if(!transform.dragging&&!e.shiftKey&&!e.ctrlKey&&!e.metaKey)selectObject(null)});
 $('challengeName').oninput=dirty;$('challengeDesc').oninput=dirty;$('difficulty').onchange=dirty;$('gravity').onchange=dirty;
-function resize(){const w=viewport.clientWidth,h=viewport.clientHeight;if(!w||!h)return;camera.aspect=w/h;camera.updateProjectionMatrix();renderer.setSize(w,h,false)}window.addEventListener('resize',resize);new ResizeObserver(resize).observe(viewport);resize();
+
+function markHistoryRestored(snapshot){
+  lastHistorySnapshot=snapshot;
+  isDirty=true;
+  $('saveState').textContent='Unsaved changes';
+  $('saveState').style.color='#ffc978';
+  renderList();
+  syncProps();
+}
+
+function undoEdit(){
+  if(!undoHistory.length){
+    toast('Nothing to undo yet');
+    return;
+  }
+
+  const current=historySnapshot();
+  const previous=undoHistory.pop();
+
+  redoHistory.push(current);
+
+  try{
+    apply(JSON.parse(previous));
+    markHistoryRestored(previous);
+    toast('Undo complete');
+  }catch(e){
+    toast('Undo failed: '+e.message);
+  }
+}
+
+function redoEdit(){
+  if(!redoHistory.length){
+    toast('Nothing to redo yet');
+    return;
+  }
+
+  const current=historySnapshot();
+  const next=redoHistory.pop();
+
+  undoHistory.push(current);
+
+  try{
+    apply(JSON.parse(next));
+    markHistoryRestored(next);
+    toast('Redo complete');
+  }catch(e){
+    toast('Redo failed: '+e.message);
+  }
+}
+
+$('undoBtn').onclick=undoEdit;
+$('redoBtn').onclick=redoEdit;
+
+document.addEventListener('keydown',e=>{
+  if(e.altKey || e.metaKey) return;
+
+  const tag=e.target?.tagName?.toLowerCase();
+
+  if(
+    tag==='input' ||
+    tag==='textarea' ||
+    tag==='select' ||
+    e.target?.isContentEditable
+  ) return;
+
+  if(e.ctrlKey && e.key.toLowerCase()==='z'){
+    e.preventDefault();
+    undoEdit();
+  }else if(e.ctrlKey && e.key.toLowerCase()==='y'){
+    e.preventDefault();
+    redoEdit();
+  }
+});
+  
+function resize(){const w=viewport.clientWidth,h=viewport.clientHeight;if(!w||!h)return;camera.aspect=w/h;camera.updateProjectionMatrix();renderer.setSize(w,h,false)}window.addEventListener('resize',resize);
+new ResizeObserver(resize).observe(viewport);
+resize();
+
+try{
+  lastHistorySnapshot=historySnapshot();
+}catch(e){};
 function animate(){requestAnimationFrame(animate);controls.update();goalMarker.children.forEach((c,i)=>{if(i===1)c.rotation.y+=.012});renderer.render(scene,camera)}animate();renderList();saved();window.addEventListener('beforeunload',e=>{if(isDirty){e.preventDefault();e.returnValue=''}});
 </script>
 </body></html>
