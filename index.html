@@ -96,7 +96,17 @@ body.account-modal-open::before{content:"";position:fixed;inset:0;z-index:100;ba
 <div class="field"><label>Rotation in degrees (X / Y / Z)</label><div class="btn-row"><input id="rotX" type="number" step="15" value="0"><input id="rotY" type="number" step="15" value="0"><input id="rotZ" type="number" step="15" value="0"></div><div class="field-note">Use the Rotate tool for the 3D gizmo, or enter exact angles here.</div><div class="angle-row"><button data-rotate="x,-15">X −15°</button><button data-rotate="y,-15">Y −15°</button><button data-rotate="z,-15">Z −15°</button><button data-rotate="x,15">X +15°</button><button data-rotate="y,15">Y +15°</button><button data-rotate="z,15">Z +15°</button></div></div>
 <div class="field"><label for="objectColor">Color</label><input id="objectColor" type="color" value="#63e6ff"></div><button id="applyPropsBtn" style="width:100%">Apply properties</button></div></section>
 <div class="divider"></div><section class="section"><h2 class="section-title">Start & destination</h2><div class="hint">🟢 Green ring = start<br>🟣 Violet beacon = goal<br><br>AI training will use these markers in a later milestone.</div><div class="btn-row" style="margin-top:10px"><button id="focusStartBtn">Focus start</button><button id="focusGoalBtn">Focus goal</button></div></section>
-<div class="divider"></div><section class="section" id="cloudAccountSection"><h2 class="section-title"><span>ACCOUNT ACCESS</span><button type="button" id="cloudAccountCloseBtn" class="account-close" aria-label="Close account panel">✕</button></h2><p class="tiny muted" style="margin:-3px 0 12px">Sign in or create an account to save your challenges privately in the cloud.</p><div class="hint" id="cloudStatus">Cloud setup needed: add your Supabase project URL and public anon key in the code. Local saving works without it.</div><div class="field" style="margin-top:10px"><label for="cloudEmail">Email</label><input id="cloudEmail" type="email" autocomplete="email" placeholder="you@example.com"></div><div class="field"><label for="cloudPassword">Password</label><input id="cloudPassword" type="password" autocomplete="current-password" minlength="6" placeholder="At least 6 characters"></div><div class="btn-row"><button id="cloudSignInBtn">Sign in</button><button id="cloudSignUpBtn">Create account</button></div><button id="cloudSignOutBtn" style="width:100%;margin-top:7px" hidden>Sign out</button><button id="cloudSaveBtn" class="primary" style="width:100%;margin-top:10px">Save to cloud</button><button id="cloudRefreshBtn" style="width:100%;margin-top:7px">Refresh my cloud challenges</button><div id="cloudList" class="saved-list" style="margin-top:9px"></div><p class="tiny muted">Cloud sync requires the included SQL setup and your own Supabase project settings. Your local saves remain available too.</p><button id="saveCopyBtn" style="width:100%;margin-top:7px">Save local copy</button></section>
+
+<p class="tiny muted" style="margin:-3px 0 12px">Manage your profile and private cloud worlds.</p>
+
+<div id="cloudProfileCard" hidden style="display:flex;align-items:center;gap:12px;padding:13px;margin:0 0 12px;border:1px solid #334155;border-radius:12px;background:linear-gradient(135deg,#172238,#101827)">
+  <div id="cloudProfileAvatar" style="width:42px;height:42px;flex:0 0 42px;display:grid;place-items:center;border-radius:50%;font-size:18px;font-weight:850;color:white;background:#4f46e5">U</div>
+  <div style="min-width:0">
+    <div id="cloudProfileName" style="font-weight:750;color:#e5efff;overflow-wrap:anywhere">User</div>
+    <div id="cloudProfileEmail" class="tiny muted" style="overflow-wrap:anywhere">Email unavailable</div>
+    <div class="tiny" style="color:#7dd3fc;margin-top:3px">Cloud account active</div>
+  </div>
+</div>
 </aside></main>
 <script type="module">
 import * as THREE from 'three';
@@ -267,7 +277,54 @@ $('saveBtn').onclick=async()=>{if(currentUser){await cloudSave()}else{save();ope
 function cloudStatus(message,isError=false){$('cloudStatus').textContent=message;$('cloudStatus').style.borderColor=isError?'#8b4758':'#263e56';$('cloudStatus').style.color=isError?'#ffb3c1':'#a8bdd8'}
 function accountDisplayName(){const meta=currentUser?.user_metadata||{};return String(meta.full_name||meta.name||meta.display_name||currentUser?.email?.split('@')[0]||'User').trim()||'User'}
 function updateAccountButton(){const btn=$('accountBtn');if(!currentUser){btn.classList.remove('profile-avatar');btn.style.removeProperty('background-color');btn.textContent='Account / Login';btn.title='Sign in or create an account';btn.setAttribute('aria-label','Account / Login');return}const name=accountDisplayName();const initial=Array.from(name)[0]?.toLocaleUpperCase()||'U';const palette=['#e05263','#d97706','#ca8a04','#16a34a','#0d9488','#0284c7','#4f46e5','#7c3aed','#c026d3','#db2777'];let hash=0;for(const ch of name.toLowerCase())hash=(hash*31+ch.charCodeAt(0))>>>0;btn.classList.add('profile-avatar');btn.textContent=initial;btn.style.backgroundColor=palette[hash%palette.length];btn.title=name+' — account settings';btn.setAttribute('aria-label',name+' account settings')}
-function cloudAuthUi(){const signed=!!currentUser;updateAccountButton();$('cloudSignOutBtn').hidden=!signed;$('cloudSignInBtn').disabled=signed;$('cloudSignUpBtn').disabled=signed;$('cloudSaveBtn').disabled=!signed;$('cloudRefreshBtn').disabled=!signed;if(signed){$('cloudEmail').value=currentUser.email||'';$('cloudEmail').disabled=true;$('cloudPassword').hidden=true;$('cloudStatus').textContent='Signed in as '+accountDisplayName()+'. Cloud saves are private to this account.'}else{$('cloudEmail').disabled=false;$('cloudPassword').hidden=false}}
+
+function cloudAuthUi(){
+  const signed = !!currentUser;
+
+  updateAccountButton();
+
+  const profile = $('cloudProfileCard');
+  profile.style.display = signed ? 'flex' : 'none';
+
+  if (signed) {
+    const name = accountDisplayName();
+
+    $('cloudProfileName').textContent = name;
+    $('cloudProfileEmail').textContent =
+      currentUser.email || 'Email unavailable';
+
+    const avatar = $('cloudProfileAvatar');
+    avatar.textContent =
+      Array.from(name)[0]?.toLocaleUpperCase() || 'U';
+
+    const accountButton = $('accountBtn');
+    if (accountButton.style.backgroundColor) {
+      avatar.style.backgroundColor =
+        accountButton.style.backgroundColor;
+    }
+
+    $('cloudEmail').value = currentUser.email || '';
+    $('cloudEmail').disabled = true;
+    $('cloudPassword').hidden = true;
+
+    $('cloudStatus').textContent =
+      'Signed in as ' + name +
+      '. Your cloud saves are private to this account.';
+  } else {
+    $('cloudEmail').disabled = false;
+    $('cloudPassword').hidden = false;
+    $('cloudPassword').value = '';
+
+    $('cloudStatus').textContent =
+      'Sign in or create an account to sync your worlds across devices.';
+  }
+
+  $('cloudSignOutBtn').hidden = !signed;
+  $('cloudSignInBtn').disabled = signed;
+  $('cloudSignUpBtn').disabled = signed;
+  $('cloudSaveBtn').disabled = !signed;
+  $('cloudRefreshBtn').disabled = !signed;
+}
 function showCloudError(error){cloudStatus(error?.message||String(error||'Cloud operation failed.'),true)}
 async function cloudSignIn(){if(!supabase){cloudStatus('Add your Supabase URL and public anon key in the script first.',true);return}const email=$('cloudEmail').value.trim(),password=$('cloudPassword').value;if(!email||!password){cloudStatus('Enter your email and password.',true);return}const {data,error}=await supabase.auth.signInWithPassword({email,password});if(error)return showCloudError(error);currentUser=data.user;cloudAuthUi();await refreshCloud();closeAccountModal();toast('Signed in to cloud storage')}
 async function cloudSignUp(){if(!supabase){cloudStatus('Add your Supabase URL and public anon key in the script first.',true);return}const email=$('cloudEmail').value.trim(),password=$('cloudPassword').value;if(!email||password.length<6){cloudStatus('Enter a valid email and a password of at least 6 characters.',true);return}const {data,error}=await supabase.auth.signUp({email,password});if(error)return showCloudError(error);if(data.session){currentUser=data.user;cloudAuthUi();await refreshCloud();closeAccountModal();toast('Account created and signed in')}else{closeAccountModal();toast('Account created — check your email to confirm it, then sign in')} }
