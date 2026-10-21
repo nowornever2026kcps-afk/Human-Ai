@@ -182,9 +182,7 @@ const transform=new TransformControls(camera,renderer.domElement);transform.setS
 let objects=[],selected=null,selectedObjects=[],multiPivot=null,challengeId=null,isDirty=false,toastTimer;
 let undoHistory=[],redoHistory=[],lastHistorySnapshot='';
 const HISTORY_LIMIT=50;
-let objects=[],selected=null,selectedObjects=[],multiPivot=null,challengeId=null,isDirty=false,toastTimer;
-let undoHistory=[],redoHistory=[],lastHistorySnapshot='';
-const HISTORY_LIMIT=50;
+
 const raycaster=new THREE.Raycaster(),pointer=new THREE.Vector2();const defaults={block:{name:'Block',size:[2,2,2],color:'#4f82b8',y:1},platform:{name:'Platform',size:[5,.5,4],color:'#3b6889',y:.25},ramp:{name:'Ramp',size:[4,.45,3],color:'#6d7fe5',y:.8},wall:{name:'Wall',size:[1,4,5],color:'#53617b',y:2},megaWall:{name:'Mega Wall',size:[1,7,12],color:'#53617b',y:3.5},stairs:{name:'Grand Staircase',size:[1,1,1],color:'#4f7397',y:0},bridge:{name:'Bridge',size:[7,.35,2],color:'#4c718b',y:1},moving:{name:'Moving Block',size:[2,1,2],color:'#e5a34d',y:2},marker:{name:'Goal Marker',size:[1,1,1],color:'#a78bfa',y:.5},arch:{name:'Archway',size:[4,4,1],color:'#6478e8',y:2},tunnel:{name:'Tunnel',size:[5,3,3],color:'#4f9da8',y:1.5},pillar:{name:'Pillar',size:[1,4,1],color:'#657d9f',y:2},pipe:{name:'Pipe',size:[4,.55,.55],color:'#e5a34d',y:1.5},crate:{name:'Crate',size:[2,2,2],color:'#a86e48',y:1},hazard:{name:'Spike Hazard',size:[3,.8,1],color:'#e35f78',y:.4},seesaw:{name:'Seesaw',size:[5,.25,1],color:'#63e6ff',y:1},spring:{name:'Spring Pad',size:[2,.6,2],color:'#a78bfa',y:.3}};
 function toast(s){$('toast').textContent=s;$('toast').classList.add('show');clearTimeout(toastTimer);toastTimer=setTimeout(()=>$('toast').classList.remove('show'),2400)}
 function historySnapshot(){
