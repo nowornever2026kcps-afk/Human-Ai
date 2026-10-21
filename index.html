@@ -99,15 +99,64 @@ body.account-modal-open::before{content:"";position:fixed;inset:0;z-index:100;ba
 
 <p class="tiny muted" style="margin:-3px 0 12px">Manage your profile and private cloud worlds.</p>
 
-<div id="cloudProfileCard" hidden style="display:flex;align-items:center;gap:12px;padding:13px;margin:0 0 12px;border:1px solid #334155;border-radius:12px;background:linear-gradient(135deg,#172238,#101827)">
-  <div id="cloudProfileAvatar" style="width:42px;height:42px;flex:0 0 42px;display:grid;place-items:center;border-radius:50%;font-size:18px;font-weight:850;color:white;background:#4f46e5">U</div>
-  <div style="min-width:0">
-    <div id="cloudProfileName" style="font-weight:750;color:#e5efff;overflow-wrap:anywhere">User</div>
-    <div id="cloudProfileEmail" class="tiny muted" style="overflow-wrap:anywhere">Email unavailable</div>
-    <div class="tiny" style="color:#7dd3fc;margin-top:3px">Cloud account active</div>
-  </div>
-</div>
+
 </aside></main>
+
+
+<section class="section" id="cloudAccountSection">
+  <h2 class="section-title">
+    <span>ACCOUNT ACCESS</span>
+    <button type="button" id="cloudAccountCloseBtn" aria-label="Close account panel">✕</button>
+  </h2>
+
+  <p class="tiny muted" style="margin:-3px 0 12px">
+    Manage your profile and private cloud worlds.
+  </p>
+
+  <div id="cloudProfileCard" hidden style="align-items:center;gap:12px;padding:13px;margin:0 0 12px;border:1px solid #334155;border-radius:12px;background:linear-gradient(135deg,#172238,#101827)">
+    <div id="cloudProfileAvatar" style="width:42px;height:42px;flex:0 0 42px;display:grid;place-items:center;border-radius:50%;font-size:18px;font-weight:850;color:white;background:#4f46e5">U</div>
+    <div style="min-width:0">
+      <div id="cloudProfileName" style="font-weight:750;color:#e5efff;overflow-wrap:anywhere">User</div>
+      <div id="cloudProfileEmail" class="tiny muted" style="overflow-wrap:anywhere">Email unavailable</div>
+      <div class="tiny" style="color:#7dd3fc;margin-top:3px">Cloud account active</div>
+    </div>
+  </div>
+
+  <div class="field">
+    <label for="cloudEmail">Email address</label>
+    <input id="cloudEmail" type="email" autocomplete="email" placeholder="you@example.com">
+  </div>
+
+  <div class="field">
+    <label for="cloudPassword">Password</label>
+    <input id="cloudPassword" type="password" autocomplete="current-password" placeholder="At least 6 characters">
+  </div>
+
+  <div class="btn-row">
+    <button type="button" id="cloudSignInBtn">Sign in</button>
+    <button type="button" id="cloudSignUpBtn" class="primary">Create account</button>
+  </div>
+
+  <div class="btn-row" style="margin-top:8px">
+    <button type="button" id="cloudSaveBtn">Save to cloud</button>
+    <button type="button" id="cloudRefreshBtn">Refresh worlds</button>
+    <button type="button" id="cloudSignOutBtn" hidden>Sign out</button>
+  </div>
+
+  <div id="cloudStatus" class="hint" role="status" style="margin-top:12px">
+    Connecting to cloud storage…
+  </div>
+
+  <div class="divider"></div>
+  <h3 style="font-size:13px">My cloud worlds</h3>
+  <div id="cloudList" class="saved-list">
+    <div class="empty">Your saved worlds will appear here.</div>
+  </div>
+</section>
+</escape>
+
+
+  
 <script type="module">
 import * as THREE from 'three';
 import {OrbitControls} from 'three/addons/controls/OrbitControls.js';
