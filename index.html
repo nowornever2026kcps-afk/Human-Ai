@@ -273,7 +273,23 @@ function colorOf(o){let m;o.traverse(x=>{if(!m&&x.isMesh&&x.material?.color)m=x}
 function serialize(){return {schema:'project-human-challenge',schemaVersion:1,id:challengeId||crypto.randomUUID(),title:$('challengeName').value.trim()||'Untitled Challenge',description:$('challengeDesc').value.trim(),difficulty:$('difficulty').value.toLowerCase(),gravity:Number($('gravity').value),start:{position:startMarker.position.toArray()},goal:{position:goalMarker.position.toArray()},human:{position:human.position.toArray()},objects:objects.map(o=>({id:o.userData.objectId,kind:o.userData.kind,name:o.userData.name,position:o.position.toArray(),rotation:[o.rotation.x,o.rotation.y,o.rotation.z],scale:o.scale.toArray(),color:colorOf(o)})),updatedAt:new Date().toISOString()}}
 function readSaved(){try{return JSON.parse(localStorage.getItem(KEY)||'[]')}catch{return []}}
 function save(){const d=serialize();challengeId=d.id;const arr=readSaved(),i=arr.findIndex(x=>x.id===d.id);const item={...d,savedAt:new Date().toISOString()};if(i>=0)arr[i]=item;else arr.unshift(item);try{localStorage.setItem(KEY,JSON.stringify(arr));saved();toast('Challenge saved in this browser')}catch{toast('Storage full. Export the JSON file instead.')}renderList()}
-$('saveBtn').onclick=async()=>{if(currentUser){await cloudSave()}else{save();openAccountModal();cloudStatus('Saved locally. Sign in to save this challenge to the cloud.',true)}};$('saveCopyBtn').onclick=save;
+const saveBtn = $('saveBtn');
+if (saveBtn) {
+  saveBtn.onclick = async () => {
+    if (currentUser) {
+      await cloudSave();
+    } else {
+      save();
+      openAccountModal();
+      cloudStatus('Saved locally. Sign in to save this challenge to the cloud.', true);
+    }
+  };
+}
+
+const saveCopyBtn = $('saveCopyBtn');
+if (saveCopyBtn) {
+  saveCopyBtn.onclick = save;
+}
 function cloudStatus(message,isError=false){$('cloudStatus').textContent=message;$('cloudStatus').style.borderColor=isError?'#8b4758':'#263e56';$('cloudStatus').style.color=isError?'#ffb3c1':'#a8bdd8'}
 function accountDisplayName(){const meta=currentUser?.user_metadata||{};return String(meta.full_name||meta.name||meta.display_name||currentUser?.email?.split('@')[0]||'User').trim()||'User'}
 function updateAccountButton(){const btn=$('accountBtn');if(!currentUser){btn.classList.remove('profile-avatar');btn.style.removeProperty('background-color');btn.textContent='Account / Login';btn.title='Sign in or create an account';btn.setAttribute('aria-label','Account / Login');return}const name=accountDisplayName();const initial=Array.from(name)[0]?.toLocaleUpperCase()||'U';const palette=['#e05263','#d97706','#ca8a04','#16a34a','#0d9488','#0284c7','#4f46e5','#7c3aed','#c026d3','#db2777'];let hash=0;for(const ch of name.toLowerCase())hash=(hash*31+ch.charCodeAt(0))>>>0;btn.classList.add('profile-avatar');btn.textContent=initial;btn.style.backgroundColor=palette[hash%palette.length];btn.title=name+' — account settings';btn.setAttribute('aria-label',name+' account settings')}
