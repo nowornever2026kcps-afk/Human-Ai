@@ -11,7 +11,7 @@ scene.add(new THREE.HemisphereLight('#c6e8ff','#1a2035',2));const keyLight=new T
 const floor=new THREE.Mesh(new THREE.PlaneGeometry(100,100),new THREE.MeshStandardMaterial({color:'#17233a',roughness:.95}));floor.rotation.x=-Math.PI/2;floor.position.y=-.03;floor.receiveShadow=true;scene.add(floor);const grid=new THREE.GridHelper(100,100,'#2c4565','#1b2c46');grid.position.y=0;scene.add(grid);
 function marker(color,label){const group=new THREE.Group();const ring=new THREE.Mesh(new THREE.TorusGeometry(.75,.065,10,48),new THREE.MeshStandardMaterial({color,emissive:color,emissiveIntensity:.65}));ring.rotation.x=Math.PI/2;ring.position.y=.05;group.add(ring);const beam=new THREE.Mesh(new THREE.CylinderGeometry(.045,.09,1.8,10),new THREE.MeshStandardMaterial({color,transparent:true,opacity:.7}));beam.position.y=.9;group.add(beam);group.userData.label=label;scene.add(group);return group}const startMarker=marker('#68e7ad','START'),goalMarker=marker('#a88bff','GOAL');
 function makeRobot(){const root=new THREE.Group();const suit=new THREE.MeshStandardMaterial({color:'#55dce8',metalness:.35,roughness:.35}),dark=new THREE.MeshStandardMaterial({color:'#253752',metalness:.45,roughness:.35}),skin=new THREE.MeshStandardMaterial({color:'#d7a98b',roughness:.7}),glow=new THREE.MeshStandardMaterial({color:'#b6fbff',emissive:'#3ccfdf',emissiveIntensity:1.5});function part(geo,mat,pos,parent=root){const m=new THREE.Mesh(geo,mat);m.position.set(...pos);m.castShadow=true;m.receiveShadow=true;parent.add(m);return m}part(new THREE.SphereGeometry(.28,24,18),skin,[0,1.65,0]);part(new THREE.BoxGeometry(.4,.12,.08),glow,[0,1.69,.245]);const torso=part(new THREE.BoxGeometry(.58,.72,.3),suit,[0,1.05,0]);part(new THREE.BoxGeometry(.35,.12,.33),dark,[0,1.44,0]);const waist=part(new THREE.BoxGeometry(.38,.18,.25),dark,[0,.63,0]);const limbs={leftArm:new THREE.Group(),rightArm:new THREE.Group(),leftLeg:new THREE.Group(),rightLeg:new THREE.Group()};for(const [key,x,y] of [['leftArm',-.39,1.31],['rightArm',.39,1.31],['leftLeg',-.17,.57],['rightLeg',.17,.57]]){limbs[key].position.set(x,y,0);root.add(limbs[key]);const arm=key.includes('Arm');part(new THREE.CapsuleGeometry(arm?.085:.105,arm?.35:.42,4,8),arm?suit:dark,[0,arm?-.21:-.22,0],limbs[key]);part(new THREE.SphereGeometry(arm?.09:.11,12,10),skin,[0,arm?-.42:-.46,arm?0:.02],limbs[key]);if(!arm)part(new THREE.BoxGeometry(.19,.11,.32),dark,[0,-.5,.08],limbs[key])}root.userData.limbs=limbs;root.userData.torso=torso;scene.add(root);return root}const robot=makeRobot();
-let worldGroups=[];let verticalVelocity=0,groundHeight=0,wasGrounded=true,jumpCooldown=0,fallStartHeight=0,airborneTime=0,lastMove=new THREE.Vector3(1,0,0),decisionConfidence=0.82,locomotionMode='WALK';const PHYSICS={gravity:14,jumpVelocity:7,maxJumpRise:1.65,maxStep:0.48,maxSafeDrop:2.35,robotHeight:1.85,bodyRadius:0.34};function clearWorld(){for(const g of worldGroups)scene.remove(g);worldGroups=[];objects=[]}
+let worldGroups=[];let navPath=[],navPathIndex=0,navReplanTimer=0,navGoalKey='';let verticalVelocity=0,groundHeight=0,wasGrounded=true,jumpCooldown=0,fallStartHeight=0,airborneTime=0,lastMove=new THREE.Vector3(1,0,0),decisionConfidence=0.82,locomotionMode='WALK';const PHYSICS={gravity:14,jumpVelocity:7,maxJumpRise:1.65,maxStep:0.48,maxSafeDrop:2.35,robotHeight:1.85,bodyRadius:0.34};function clearWorld(){for(const g of worldGroups)scene.remove(g);worldGroups=[];objects=[];navPath=[];navPathIndex=0;navReplanTimer=0;navGoalKey=''}
 function setChallenge(d){if(!d||d.schema!=='project-human-challenge'||!Array.isArray(d.objects))throw Error('This is not a valid PROJECT HUMAN challenge JSON.');challenge=d;clearWorld();const sp=d.start?.position||d.human?.position||[-7,0,0],gp=d.goal?.position||[7,0,0];startMarker.position.set(sp[0]||0,0,sp[2]||0);goalMarker.position.set(gp[0]||0,0,gp[2]||0);for(const data of d.objects){
 const p=data.position||[0,0,0],s=data.scale||[1,1,1],r=data.rotation||[0,0,0];
 const baseSizes={block:[2,2,2],platform:[5,.5,4],ramp:[4,.45,3],wall:[1,4,5],megaWall:[1,7,12],stairs:[3.2,2.72,5.76],bridge:[7,.35,2],moving:[2,1,2],marker:[1,1,1],arch:[4,4,1],tunnel:[5,3,3],pillar:[1,4,1],pipe:[4,.55,.55],crate:[2,2,2],hazard:[3,.8,1],seesaw:[5,.25,1],spring:[2,.6,2]};
@@ -67,7 +67,7 @@ for(const mesh of parts){
 }robot.position.set(sp[0]||0,0,sp[2]||0);robot.rotation.y=0;verticalVelocity=0;groundHeight=0;wasGrounded=true;jumpCooldown=0;airborneTime=0;locomotionMode='WALK';attemptActive=false;running=false;autoTraining=false;if(retryTimer){clearTimeout(retryTimer);retryTimer=null}attemptProgress=0;finished=false;attemptElapsed=0;collisionCount=0;brain.setChallenge({start:sp,goal:gp,obstacles:objects.map(o=>({x:o.x,z:o.z,halfX:o.halfX,halfZ:o.halfZ,height:o.height}))});camera.position.set((sp[0]+gp[0])/2+10,Math.max(10,Math.abs(sp[0]-gp[0])*.55),Math.max(12,Math.abs(sp[2]-gp[2])+12));controls.target.set((sp[0]+gp[0])/2,1,((sp[2]||0)+(gp[2]||0))/2);controls.update();$('worldTitle').textContent=d.title||'Untitled challenge';$('worldDescription').textContent=d.description||'Challenge imported from PROJECT HUMAN World Builder.';$('worldCaption').textContent=`${d.title||'Untitled world'} · ${d.objects.length} placed objects`;$('obstacleCount').textContent=String(d.objects.length);$('worldMessage').textContent='World loaded. The editor file is unchanged.';updateStats();}
 function loadLatest(){try{const active=localStorage.getItem(ACTIVE_KEY);if(active){setChallenge(JSON.parse(active));return true}const saved=JSON.parse(localStorage.getItem(SAVED_KEY)||'[]');if(saved.length){setChallenge(saved[0]);$('worldMessage').textContent='Loaded most recently saved local editor world.';return true}throw Error('No editor world found in this browser. Open the World Builder, then click “Send to Humanoid AI”.')}catch(e){$('worldMessage').textContent=e.message;return false}}
 function refreshSaved(){const select=$('savedWorlds');select.innerHTML='<option value="">Choose a saved world…</option>';let arr=[];try{arr=JSON.parse(localStorage.getItem(SAVED_KEY)||'[]')}catch{}for(const d of arr){const op=document.createElement('option');op.value=d.id;op.textContent=d.title||'Untitled challenge';select.append(op)}}
-function robotReset(){const sp=challenge?.start?.position||challenge?.human?.position||[-7,0,0];robot.position.set(sp[0]||0,0,sp[2]||0);robot.rotation.set(0,0,0);verticalVelocity=0;groundHeight=0;wasGrounded=true;jumpCooldown=0;airborneTime=0;locomotionMode='WALK';Object.values(robot.userData.limbs).forEach(l=>l.rotation.set(0,0,0));attemptProgress=0;attemptElapsed=0;attemptActive=false;finished=false;collisionCount=0;brain.beginEpisode();updateStats()}
+function robotReset(){const sp=challenge?.start?.position||challenge?.human?.position||[-7,0,0];navPath=[];navPathIndex=0;navReplanTimer=0;navGoalKey='';robot.position.set(sp[0]||0,0,sp[2]||0);robot.rotation.set(0,0,0);verticalVelocity=0;groundHeight=0;wasGrounded=true;jumpCooldown=0;airborneTime=0;locomotionMode='WALK';Object.values(robot.userData.limbs).forEach(l=>l.rotation.set(0,0,0));attemptProgress=0;attemptElapsed=0;attemptActive=false;finished=false;collisionCount=0;brain.beginEpisode();updateStats()}
 function beginAttempt(){if(!challenge&&!loadLatest())return;robot.userData.torso.material.emissive=new THREE.Color('#000000');robot.userData.torso.material.emissiveIntensity=0;if(retryTimer){clearTimeout(retryTimer);retryTimer=null}robotReset();attemptActive=true;running=true;finished=false;lastTime=0;$('simStatus').textContent=autoTraining?'TRAINING · ATTEMPT '+(brain.getStats().attempts+1):'TRAINING';$('reasonText').textContent='Testing a strategy informed by previous attempts…'}
 function complete(success,reason){if(finished)return;finished=true;attemptActive=false;running=false;attemptsThisSession++;if(success)successesThisSession++;else failuresThisSession++;brain.learn({success});$('simStatus').textContent=success?'SUCCESS':(autoTraining?'LEARNING · RETRYING':'ATTEMPT ENDED');$('reasonText').textContent=success?reason:(reason+' Previous experience is saved; the next attempt will adapt its choices.');updateStats();if(success){autoTraining=false;if(retryTimer){clearTimeout(retryTimer);retryTimer=null}}else if(autoTraining){retryTimer=setTimeout(()=>{retryTimer=null;if(autoTraining&&challenge)beginAttempt()},850)}}
 function updateStats(){const s=brain.getStats();$('attempts').textContent=String(s.attempts);$('successRate').textContent=(s.attempts?Math.round(s.successes/s.attempts*100):0)+'%';$('policyLevel').textContent=String(s.policyLevel);$('progressText').textContent=Math.round(attemptProgress*100)+'%';$('progressBar').style.width=(attemptProgress*100)+'%';$('memorySuccess').textContent=String(s.successes);$('memoryFail').textContent=String(s.failures);$('memoryAvoid').textContent=s.avoidanceBias.toFixed(2)+'×';$('obstacleCount').textContent=String(challenge?.objects?.length??objects.length)}
@@ -100,9 +100,17 @@ function surfaceAt(x,z,fromY,allowStep=true){
 function bodyBlocked(x,y,z,ignoreTop=false){
  const feet=y,head=y+PHYSICS.robotHeight;
  for(const o of objects){if(!overlapXZ(x,z,o,.27))continue;const b=objectBounds(o);
+  // Stair treads and ramps are terrain. Only reject them when their next support
+  // surface is beyond a safe step/jump; otherwise surfaceAt() handles elevation.
+  if(o.kind==='stairs'||o.kind==='ramp'){
+   const support=surfaceAt(x,z,feet,true),rise=support.height-feet;
+   if(rise<=PHYSICS.maxStep+.09&&rise>=-.25)continue;
+   if(rise>PHYSICS.maxStep+.09&&rise<=PHYSICS.maxJumpRise&&wasGrounded)continue;
+   if(rise>PHYSICS.maxJumpRise) return o;
+   continue;
+  }
   // A roof is still solid when the robot's head reaches it; side walls only block when vertical volumes overlap.
   if(head>b.minY+.03&&feet<b.maxY-.025){
-   // Small ledges can be stepped onto; their top is handled by surfaceAt().
    if(b.maxY-feet<=PHYSICS.maxStep+.06)continue;
    if(ignoreTop&&Math.abs(feet-b.maxY)<.12)continue;
    return o;
@@ -122,6 +130,55 @@ function findForwardObstacle(x,z,dir,reach=1.65){
  }
  return nearest?{object:nearest,distance:dist}:null;
 }
+// Grid-based route planning: prefer a real open corridor over repeatedly pushing into a wall.
+// Stairs and ramps are passable terrain; tall walls and solid blocks remain blocked.
+const NAV_CELL=.7;
+function navCellBlocked(x,z){
+ for(const o of objects){
+  const b=objectBounds(o);
+  if(x<b.minX-PHYSICS.bodyRadius||x>b.maxX+PHYSICS.bodyRadius||z<b.minZ-PHYSICS.bodyRadius||z>b.maxZ+PHYSICS.bodyRadius)continue;
+  if(o.kind==='stairs'||o.kind==='ramp')continue;
+  if(['platform','bridge','block','crate','spring','seesaw','moving','pipe','hazard'].includes(o.kind)){
+   // Low surfaces are walkable; raised platforms are obstacles to the ground-level planner.
+   if(b.maxY<=PHYSICS.maxStep+.08)continue;
+  }
+  if(b.maxY>.45&&b.minY<PHYSICS.robotHeight+.25)return true;
+ }
+ return false;
+}
+function planRoute(start,goal){
+ const all=[start,goal];for(const o of objects){const b=objectBounds(o);all.push({x:b.minX,z:b.minZ},{x:b.maxX,z:b.maxZ});}
+ let minX=Math.min(...all.map(v=>v.x))-2.8,maxX=Math.max(...all.map(v=>v.x))+2.8,minZ=Math.min(...all.map(v=>v.z))-2.8,maxZ=Math.max(...all.map(v=>v.z))+2.8;
+ // Bound the grid so large editor worlds cannot stall the animation loop.
+ const maxSpan=62;if(maxX-minX>maxSpan){const c=(start.x+goal.x)/2;minX=c-maxSpan/2;maxX=c+maxSpan/2;}if(maxZ-minZ>maxSpan){const c=(start.z+goal.z)/2;minZ=c-maxSpan/2;maxZ=c+maxSpan/2;}
+ const cols=Math.max(3,Math.ceil((maxX-minX)/NAV_CELL)+1),rows=Math.max(3,Math.ceil((maxZ-minZ)/NAV_CELL)+1);
+ const cell=(x,z)=>({ix:Math.max(0,Math.min(cols-1,Math.round((x-minX)/NAV_CELL))),iz:Math.max(0,Math.min(rows-1,Math.round((z-minZ)/NAV_CELL)))});
+ const key=(ix,iz)=>iz*cols+ix,point=(ix,iz)=>({x:minX+ix*NAV_CELL,z:minZ+iz*NAV_CELL});
+ const nearestFree=(c)=>{if(!navCellBlocked(point(c.ix,c.iz).x,point(c.ix,c.iz).z))return c;for(let r=1;r<8;r++){for(let dz=-r;dz<=r;dz++)for(let dx=-r;dx<=r;dx++){if(Math.abs(dx)!==r&&Math.abs(dz)!==r)continue;const ix=c.ix+dx,iz=c.iz+dz;if(ix<0||iz<0||ix>=cols||iz>=rows)continue;const q=point(ix,iz);if(!navCellBlocked(q.x,q.z))return {ix,iz};}}return c;};
+ const a=nearestFree(cell(start.x,start.z)),b=nearestFree(cell(goal.x,goal.z));const startId=key(a.ix,a.iz),goalId=key(b.ix,b.iz);if(startId===goalId)return [goal];
+ const total=cols*rows,g=new Float64Array(total);g.fill(Infinity);const came=new Int32Array(total);came.fill(-1);const closed=new Uint8Array(total);const f=new Float64Array(total);f.fill(Infinity);g[startId]=0;
+ const heuristic=(ix,iz)=>{const dx=Math.abs(ix-b.ix),dz=Math.abs(iz-b.iz);return Math.max(dx,dz)+(Math.SQRT2-1)*Math.min(dx,dz);};f[startId]=heuristic(a.ix,a.iz);
+ // Binary min-heap, to keep path planning responsive in larger worlds.
+ const heap=[];function push(id,score){let i=heap.length;heap.push({id,score});while(i>0){const p=(i-1)>>1;if(heap[p].score<=score)break;heap[i]=heap[p];i=p;}heap[i]={id,score};}
+ function pop(){const top=heap[0],last=heap.pop();if(heap.length){let i=0;while(true){let l=i*2+1,r=l+1,best=i;if(l<heap.length&&heap[l].score<heap[best].score)best=l;if(r<heap.length&&heap[r].score<heap[best].score)best=r;if(best===i)break;heap[i]=heap[best];i=best;}heap[i]=last;}return top;}
+ push(startId,f[startId]);let found=false,iterations=0;const dirs=[[1,0],[-1,0],[0,1],[0,-1],[1,1],[1,-1],[-1,1],[-1,-1]];
+ while(heap.length&&iterations++<total*2){const cur=pop(),id=cur.id;if(closed[id])continue;if(id===goalId){found=true;break;}closed[id]=1;const ix=id%cols,iz=Math.floor(id/cols);
+  for(const [dx,dz] of dirs){const nx=ix+dx,nz=iz+dz;if(nx<0||nz<0||nx>=cols||nz>=rows)continue;const nid=key(nx,nz);if(closed[nid])continue;const q=point(nx,nz);if(navCellBlocked(q.x,q.z))continue;
+   if(dx&&dz&&(navCellBlocked(point(ix+dx,iz).x,point(ix+dx,iz).z)||navCellBlocked(point(ix,iz+dz).x,point(ix,iz+dz).z)))continue;
+   const ng=g[id]+(dx&&dz?Math.SQRT2:1);if(ng<g[nid]){came[nid]=id;g[nid]=ng;f[nid]=ng+heuristic(nx,nz);push(nid,f[nid]);}
+  }
+ }
+ if(!found)return [];
+ const ids=[];let cur=goalId;while(cur!==-1&&cur!==startId){ids.push(cur);cur=came[cur];}ids.reverse();const raw=ids.map(id=>point(id%cols,Math.floor(id/cols)));
+ // Keep turns and long straight segments, rather than steering to every tiny cell.
+ const smooth=[];let last=start,prevDir=null;for(let i=0;i<raw.length;i++){const q=raw[i],dx=Math.sign(q.x-last.x),dz=Math.sign(q.z-last.z),d=dx+','+dz;if(prevDir!==null&&d!==prevDir){smooth.push(raw[i-1]);}prevDir=d;last=q;}if(raw.length)smooth.push(raw[raw.length-1]);smooth.push(goal);return smooth;
+}
+function navigationTarget(pos,goal,dt){
+ navReplanTimer-=dt;const goalKey=`${Math.round(goal.x*2)/2},${Math.round(goal.z*2)/2}`;
+ if(navReplanTimer<=0||navGoalKey!==goalKey||!navPath.length){navPath=planRoute({x:pos.x,z:pos.z},{x:goal.x,z:goal.z});navPathIndex=0;navReplanTimer=.85;navGoalKey=goalKey;}
+ while(navPathIndex<navPath.length-1&&Math.hypot(navPath[navPathIndex].x-pos.x,navPath[navPathIndex].z-pos.z)<.85)navPathIndex++;
+ return navPath[navPathIndex]||goal;
+}
 function triggerJump(reason){
  if(!wasGrounded||jumpCooldown>0)return false;
  verticalVelocity=PHYSICS.jumpVelocity;wasGrounded=false;airborneTime=0;jumpCooldown=.22;locomotionMode='JUMP';
@@ -140,13 +197,18 @@ function updateRobot(dt){
  const obstacles=objects.map(o=>({x:o.x,z:o.z,halfX:o.halfX,halfZ:o.halfZ,radius:o.radius,height:o.height,kind:o.kind}));
  const state=brain.observe(pos,goal,obstacles),action=brain.chooseAction(state,pos);
  if(action.type==='goal'&&Math.abs(pos.y-groundHeight)<.45){attemptProgress=1;complete(true,'Goal reached. The successful route and movement decisions have been reinforced.');return;}
- const dir=new THREE.Vector3(goal.x-pos.x,0,goal.z-pos.z).normalize();const angle=action.angle||0;
+ const waypoint=navigationTarget(pos,goal,dt);const routeDX=waypoint.x-pos.x,routeDZ=waypoint.z-pos.z;
+ const routeLength=Math.hypot(routeDX,routeDZ);const dir=routeLength>.001?new THREE.Vector3(routeDX/routeLength,0,routeDZ/routeLength):new THREE.Vector3(goal.x-pos.x,0,goal.z-pos.z).normalize();
+ // Follow the planned corridor decisively; only use the learned steering angle when no route can be found.
+ const angle=navPath.length?(Math.abs(action.angle||0)<.28?0:(action.angle||0)*.18):(action.angle||0);
  const move=new THREE.Vector3(dir.x*Math.cos(angle)-dir.z*Math.sin(angle),0,dir.x*Math.sin(angle)+dir.z*Math.cos(angle)).normalize();
- const look=findForwardObstacle(pos.x,pos.z,move,1.55);const chosen=look?.object;
+ const look=findForwardObstacle(pos.x,pos.z,move,1.15);const chosen=look?.object;
  const kind=chosen?.kind||'';const obstacleTop=chosen?objectBounds(chosen).maxY:0;
  let speed=locomotionMode==='JUMP'&&!wasGrounded?3.15:(action.type==='avoid'?2.05:2.45);let message=action.reason||'Moving toward the goal.';
  // A cautious, geometry-aware policy: step up small ledges, climb stairs/ramp, jump low obstacles, detour around tall walls.
- if(chosen){
+ if(chosen&&navPath.length&&['wall','megaWall','pillar','arch','tunnel'].includes(kind)){
+  navPath=[];navPathIndex=0;navReplanTimer=0;speed=1.4;message=`${kind} ahead: replanning around the barrier instead of repeatedly pushing into it.`;decisionConfidence=.97;
+ }else if(chosen){
   const rise=obstacleTop-groundHeight;
   if(kind==='stairs'||kind==='ramp'){
    speed=1.45;message=kind==='stairs'?'Stairs detected: shortening stride and climbing one step at a time.':'Ramp detected: following the sloped surface at a controlled pace.';
@@ -174,11 +236,19 @@ function updateRobot(dt){
   hit=bodyBlocked(next.x,pos.y,next.z,false);
  }
  if(hit){
-  const left=new THREE.Vector3(-move.z,0,move.x),right=new THREE.Vector3(move.z,0,-move.x);
-  const lRisk=brain.pathRisk(pos,{x:left.x,z:left.z},obstacles),rRisk=brain.pathRisk(pos,{x:right.x,z:right.z},obstacles);
-  const detour=lRisk<=rRisk?left:right;next=pos.clone().addScaledVector(detour,Math.min(speed,1.8)*dt);hit=bodyBlocked(next.x,pos.y,next.z,true);
-  message=`Obstacle sensed at body height. Rechecking clearance and moving toward the safer side.`;decisionConfidence=.9;
-  if(hit){brain.recordCollision(action,hit);collisionCount++;if(collisionCount>=7){complete(false,'The route is blocked by an obstacle too tall or narrow to cross safely.');return;}next.x=pos.x;next.z=pos.z;}
+  const blockedObject=hit;
+  // Do not alternate left/right blindly when a planned route is blocked. Stop, invalidate
+  // the route, and let A* search for another corridor on the next frame.
+  if(navPath.length){
+   navPath=[];navPathIndex=0;navReplanTimer=0;next=pos.clone();
+   message=`Route blocked by ${blockedObject.data?.name||blockedObject.kind||'an obstacle'}; stopping briefly and calculating a new path.`;decisionConfidence=.97;
+  }else{
+   const left=new THREE.Vector3(-move.z,0,move.x),right=new THREE.Vector3(move.z,0,-move.x);
+   const lRisk=brain.pathRisk(pos,{x:left.x,z:left.z},obstacles),rRisk=brain.pathRisk(pos,{x:right.x,z:right.z},obstacles);
+   const detour=lRisk<=rRisk?left:right;next=pos.clone().addScaledVector(detour,Math.min(speed,1.8)*dt);hit=bodyBlocked(next.x,pos.y,next.z,true);
+   message=`Obstacle sensed at body height. Rechecking clearance and moving toward the safer side.`;decisionConfidence=.9;
+   if(hit){brain.recordCollision(action,hit);collisionCount++;if(collisionCount>=7){complete(false,'The route is blocked by an obstacle too tall or narrow to cross safely.');return;}next.x=pos.x;next.z=pos.z;}
+  }
  }else collisionCount=Math.max(0,collisionCount-1);
  const oldX=pos.x,oldZ=pos.z,oldDist=Math.hypot(goal.x-pos.x,goal.z-pos.z);
  pos.x=next.x;pos.z=next.z;
