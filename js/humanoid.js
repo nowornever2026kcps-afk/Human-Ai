@@ -268,7 +268,7 @@ function updateRobot(dt){
  // Turn smoothly toward the chosen route instead of instantly changing heading.
  // This gives the robot directional commitment and removes frame-to-frame jitter.
  if(navHeading.lengthSq()<.01)navHeading.copy(move);
- navHeading.rotateTowards(move, Math.min(2.25*dt, 0.18));
+ navHeading.lerp(move, Math.min(1, 2.25*dt)).normalize();
  move.copy(navHeading).normalize();
  // Sample ahead before committing. If the direct step intersects a solid wall, stop and replan.
  let next=pos.clone().addScaledVector(move,speed*dt);let hit=bodyBlocked(next.x,pos.y,next.z,true);
