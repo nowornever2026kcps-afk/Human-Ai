@@ -1,4 +1,4 @@
-const MEMORY_KEY='project-human-brain-neural-v2'; 
+const MEMORY_KEY='project-human-brain-neural-v2';
 const clamp=(v,min,max)=>Math.max(min,Math.min(max,v));
 const footprint=o=>({halfX:Math.max(.25,Number(o.halfX??o.radius??1)),halfZ:Math.max(.25,Number(o.halfZ??o.radius??1))});
 const freshMemory=()=>({attempts:0,successes:0,failures:0,avoidanceBias:1,models:{}});
